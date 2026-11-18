@@ -19,6 +19,7 @@ const DataFreshness = () => import('@/views/data_freshness/index.vue')
 const MetricAlias = () => import('@/views/metric_alias/index.vue')
 const ExprFactor = () => import('@/views/expr_factor/index.vue')
 const EvaluateBoard = () => import('@/views/evaluate_board/index.vue')
+const FactorAllocation = () => import('@/views/factor_allocation/index.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -42,6 +43,7 @@ const router = createRouter({
     { path: '/metric_alias', name: 'metric_alias', component: MetricAlias },
     { path: '/expr_factor', name: 'expr_factor', component: ExprFactor },
     { path: '/evaluate_board', name: 'evaluate_board', component: EvaluateBoard },
+    { path: '/factor_allocation', name: 'factor_allocation', component: FactorAllocation },
   ],
 })
 

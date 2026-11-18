@@ -41,6 +41,14 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/factor_layers")
+def factor_layers(
+    batch_no: str | None = Query(default=None, description="不传则读取在册批次"),
+) -> dict:
+    """V015 联动：读取因子约束分配表中该批次的实验编号与因子层，核对指标口径。"""
+    return service.factor_layers(batch_no=batch_no)
+
+
 @router.get("/export")
 def export_entries(
     request: Request,

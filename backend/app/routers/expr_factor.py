@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from app.schemas import ActionPayload, ActionResult, EntryPayload, PageResult
 from app.services.expr_factor import ExprFactorService
+from app.services.factor_allocation import FactorAllocationService
 
 router = APIRouter(prefix="/api/expr_factor", tags=["实验因子"])
 
@@ -90,3 +91,27 @@ def run_action(entry_id: int, payload: ActionPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
+
+
+@router.put("/{entry_id}", response_model=ActionResult)
+def update_entry(entry_id: int, payload: dict[str, object]) -> ActionResult:
+    """只改一条因子配置，改完只重算受影响的因子组，已完成分配保持不变。"""
+    try:
+        allocation = FactorAllocationService().update_factor(entry_id, dict(payload))
+    except KeyError:
+        return ActionResult(ok=False, message=f"因子配置 {entry_id} 不存在或已归档")
+    entry = allocation["因子配置"]
+    if not allocation["变更"]:
+        return ActionResult(ok=True, message="因子配置未发生变化，分配表保持不变", entry=entry)
+    if allocation.get("重算结果") is None:
+        return ActionResult(ok=True, message="因子配置已更新；当前没有分配表，未触发重算", entry=entry)
+    affected = allocation.get("受影响因子组") or []
+    return ActionResult(
+        ok=True,
+        message=(
+            f"因子配置已更新，仅重算受影响的因子组：{'、'.join(affected)}；"
+            f"缓存批次 {allocation.get('缓存批次') or '—'} 可查"
+            if affected else "因子配置已更新，分配表保持不变"
+        ),
+        entry=entry,
+    )

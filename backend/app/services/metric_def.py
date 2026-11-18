@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app import factor_rules as rules
 from app.store import store
 
 MODULE = "metric_def"
@@ -63,3 +64,52 @@ class MetricDefService:
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"指标定义已{action}"
+
+    def factor_layers(self, batch_no: str | None = None) -> dict[str, Any]:
+        """V015 跨模块联动：读取分配表中的实验编号、缓存批次与因子层。
+
+        指标口径要按「因子层」核对，因此这里只消费分配表已回执的明细，不回表读因子配置；
+        同一实验在分配表里保留的缓存批次与规则版本可以逐条追溯。
+        """
+        target = batch_no or next(
+            (
+                str(batch.get("缓存批次"))
+                for batch in sorted(
+                    store.rows(rules.BATCH_MODULE),
+                    key=lambda r: int(r.get("id", 0)),
+                    reverse=True,
+                )
+                if batch.get("状态") in {"生成中", "部分完成", "已完成"}
+            ),
+            "",
+        )
+        rows = [
+            row for row in store.rows(rules.ALLOCATION_MODULE)
+            if row.get("分配批次") == target
+        ]
+        by_layer: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            layer = str(row.get("因子层级") or "")
+            bucket = by_layer.setdefault(layer, {
+                "因子层级": layer,
+                "实验编号": [],
+                # 分配批次是整组提交的批次头；缓存批次是这条明细实际复用的约束缓存来源。
+                "缓存批次": row.get("缓存批次", ""),
+                "分配批次": target,
+                "规则版本": row.get("规则版本", ""),
+                "明细数": 0,
+                "待复核数": 0,
+            })
+            bucket["明细数"] += 1
+            if row.get("生成状态") != "已回执":
+                bucket["待复核数"] += 1
+            code = str(row.get("实验编号") or "")
+            if code and code not in bucket["实验编号"]:
+                bucket["实验编号"].append(code)
+        return {
+            "缓存批次": target,
+            "分配批次": target,
+            "因子层": [by_layer[layer] for layer in sorted(by_layer)],
+            "覆盖实验": sorted({str(row.get("实验编号") or "") for row in rows} - {""}),
+            "明细总数": len(rows),
+        }

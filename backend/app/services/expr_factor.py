@@ -63,3 +63,14 @@ class ExprFactorService:
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"因子配置已{action}"
+
+    def update_entry(self, entry_id: int, values: dict[str, Any]) -> dict[str, Any] | None:
+        """只改因子配置字段；改完由分配服务判断受影响因子组并增量重算。"""
+        entry = store.find(MODULE, entry_id)
+        if entry is None:
+            return None
+        for field in LIST_FIELDS:
+            if field in values:
+                entry[field] = values.get(field)
+        store.bump_version(MODULE)
+        return entry

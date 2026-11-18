@@ -72,6 +72,40 @@
       </form>
     </div>
 
+    <section class="factor-link" data-testid="factor-layers">
+      <header class="page-head">
+        <div>
+          <h3>因子层口径核对</h3>
+          <p class="page-desc">
+            读取因子约束分配表中该批次的实验编号、缓存批次与因子层，核对指标口径。
+          </p>
+        </div>
+        <span class="page-desc">缓存批次 {{ factorView?.['缓存批次'] || '—' }}</span>
+      </header>
+      <table class="data-table">
+        <thead>
+          <tr><th>因子层级</th><th>缓存批次</th><th>规则版本</th><th>覆盖实验</th><th>明细数</th><th>待复核</th></tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="layer in factorView?.['因子层'] ?? []"
+            :key="layer['因子层级']"
+            :data-testid="`layer-${layer['因子层级']}`"
+          >
+            <td>{{ layer['因子层级'] }}</td>
+            <td>{{ layer['缓存批次'] || '—' }}</td>
+            <td>{{ layer['规则版本'] || '—' }}</td>
+            <td>{{ (layer['实验编号'] || []).join('、') || '—' }}</td>
+            <td>{{ layer['明细数'] }}</td>
+            <td>{{ layer['待复核数'] }}</td>
+          </tr>
+          <tr v-if="!(factorView?.['因子层'] ?? []).length">
+            <td colspan="6" class="empty-state">暂无因子约束分配，可先在「因子约束分配」页生成分配表</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条指标定义记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -94,6 +128,7 @@ const metricNames = ["指标定义总数", "待校验指标", "已生效指标"]
 
 const rows = ref<Row[]>([])
 const total = ref(0)
+const factorView = ref<Record<string, any> | null>(null)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
@@ -182,7 +217,22 @@ async function reload() {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '指标定义列表读取失败'
   }
+  await loadFactorLayers()
+}
+
+async function loadFactorLayers() {
+  try {
+    const response = await request(`${ENDPOINT}/factor_layers`)
+    if (!response.ok) return
+    factorView.value = await response.json()
+  } catch {
+    factorView.value = null
+  }
 }
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.factor-link { margin-top: 16px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px 12px; }
+</style>

@@ -48,6 +48,9 @@
             >
               {{ action }}
             </button>
+            <button class="link" type="button" :data-testid="`edit-${row.id}`" @click="openEdit(row)">
+              修改配置
+            </button>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -72,8 +75,26 @@
       </form>
     </div>
 
+    <div v-if="editRow" class="modal-backdrop" data-testid="edit-modal">
+      <form class="modal" @submit.prevent="submitEdit">
+        <h3>修改因子配置 · {{ editRow['因子编号'] }}</h3>
+        <p class="page-desc">保存后只重算受影响的因子组，已完成分配保持原样，缓存批次号可查。</p>
+        <label v-for="field in columns" :key="field" class="create-field">
+          <span>{{ field }}</span>
+          <input v-model="editValues[field]" :data-testid="`edit-field-${field}`" />
+        </label>
+        <div class="page-actions">
+          <button class="btn" type="button" @click="editRow = null">取消</button>
+          <button class="btn primary" data-testid="submit-edit" type="submit" :disabled="saving">
+            {{ saving ? '保存中…' : '保存并增量重算' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条实验因子记录</span>
+      <span v-if="message" class="foot-message" data-testid="message">{{ message }}</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -100,6 +121,10 @@ const filterFields = columns.slice(0, 3)
 const showCreate = ref(false)
 const creating = ref(false)
 const createValues = ref<Record<string, string>>({})
+const editRow = ref<Row | null>(null)
+const editValues = ref<Record<string, string>>({})
+const saving = ref(false)
+const message = ref('')
 const stats = computed(() => [
   { label: metricNames[0], value: total.value },
   { label: metricNames[1], value: rows.value.filter((row) => row.status === statuses[1]).length },
@@ -131,7 +156,35 @@ async function exportRows() {
 function openCreate() {
   createValues.value = Object.fromEntries(columns.map((field) => [field, '']))
   errorMessage.value = ''
+  message.value = ''
   showCreate.value = true
+}
+
+function openEdit(row: Row) {
+  editRow.value = row
+  editValues.value = Object.fromEntries(columns.map((field) => [field, String(row[field] ?? '')]))
+  errorMessage.value = ''
+  message.value = ''
+}
+
+async function submitEdit() {
+  saving.value = true
+  errorMessage.value = ''
+  message.value = ''
+  try {
+    const response = await request(`${ENDPOINT}/${editRow.value?.id}`, {
+      method: 'PUT', body: JSON.stringify(editValues.value),
+    })
+    const payload = await response.json()
+    if (!response.ok || !payload.ok) throw new Error(payload.message || '保存失败')
+    message.value = payload.message || '因子配置已更新'
+    editRow.value = null
+    await reload()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '保存失败'
+  } finally {
+    saving.value = false
+  }
 }
 
 async function submitCreate() {

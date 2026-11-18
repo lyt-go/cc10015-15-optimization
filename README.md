@@ -67,6 +67,40 @@ npm run dev
 | 口径注册 | `metric_alias` | 口径版本 | 版本编号、指标编号、变更说明 |
 | 实验因子 | `expr_factor` | 因子配置 | 因子编号、因子名称、因子层级 |
 | 评估看板 | `evaluate_board` | 看板配置 | 看板编号、看板名称、关联实验 |
+| 因子约束分配 | `factor_allocation` | 因子约束分配表 | 分配批次、缓存批次、实验编号、规则版本 |
+
+## 因子约束分配（V015）
+
+整组生成因子约束分配表，按批次复用已校验约束：
+
+- 读取：一批分配只在开头读一次实验表、一次因子配置表，同批次内所有因子组复用同一份
+  快照，实验规模变大时读取次数不随行数增长（`store.read_rows` 记扫描次数）。
+- 缓存：`factor_constraint_cache` 以「因子组 + 因子摘要」为键保存校验结果与规则版本，
+  约束缓存与规则版本同一条落库；同一组旧版本打失效标记保留差异。
+- 分配表：`factor_allocation_batch` 是整组一次提交的批次头，`factor_allocation` 逐条回执，
+  每条明细都带 `分配批次`（整组提交的批次）与 `缓存批次`（实际复用的约束缓存来源）。
+- 增量：只改一个因子配置时只重算摘要变化的因子组，其他组明细与规则版本保持不变，
+  缓存批次号可查。
+- 中断续算：每个因子组单独提交，中断只回滚当前组；`retry` 只补未完成组，已完成组不回退。
+- 版本冲突：`reuse` 保留旧缓存结果与批次号，把补算实验单列；`rebuild` 清空缓存整批重建，
+  旧批次明细与旧缓存差异写入 `factor_allocation_archive` 留档。
+- 核对：`GET /api/factor_allocation/verify` 校验明细与缓存一一对齐、同组同版本不并行
+  两套缓存批次、批次头明细数与实际一致。
+- 联动：指标定义页（V015）通过 `GET /api/metric_def/factor_layers` 读取分配表中的实验编号、
+  缓存批次与因子层，核对指标口径。
+
+主要接口：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/factor_allocation/generate` | 生成分配表，可带 `scope`、`strategy`、`dry_run` |
+| POST | `/api/factor_allocation/retry` | 中断后按未完成组补算 |
+| POST | `/api/factor_allocation/rebuild` | 清空缓存后整批重建并留档 |
+| GET | `/api/factor_allocation` | 分配明细列表（含详情字段） |
+| GET | `/api/factor_allocation/status` | 在册批次、缓存条数与配置版本 |
+| GET | `/api/factor_allocation/verify` | 事务残留核对 |
+| GET | `/api/factor_allocation/consumer` | 下游消费视图（实验编号、缓存批次、因子层） |
+| PUT | `/api/expr_factor/{id}` | 修改单条因子配置并只重算受影响组 |
 
 ## 约定
 
